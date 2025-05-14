@@ -34,6 +34,7 @@ Here's the current list of tools provided:
 - **search-feeds**: returns feeds for a given query
 - **like-post**: like a post with a specific URI
 - **create-post**: publish a post 
+- **create-thread**: publish a thread of posts
 - **follow-user**: follow a specific user
 
 Tips:

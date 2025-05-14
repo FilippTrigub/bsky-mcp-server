@@ -1366,6 +1366,77 @@ ${follower.indexedAt ? `Following since: ${new Date(follower.indexedAt).toLocale
 );
 
 server.tool(
+  "create-thread",
+  "Create a thread of posts on Bluesky",
+  {
+    posts: z.array(z.string().max(300)).min(2).describe("Array of post contents for the thread"),
+  },
+  async ({ posts }) => {
+    if (!agent) {
+      return mcpErrorResponse("Not connected to Bluesky. Check your environment variables.");
+    }
+
+    try {
+      if (posts.length < 2) {
+        return mcpErrorResponse("A thread requires at least 2 posts.");
+      }
+
+      // Create the first post in the thread
+      const firstPostRecord: any = {
+        text: posts[0],
+        createdAt: new Date().toISOString(),
+      };
+
+      const firstPostResponse = await agent.post(firstPostRecord);
+      
+      if (!firstPostResponse || !firstPostResponse.uri) {
+        throw new Error("Failed to create the first post in the thread");
+      }
+
+      let previousPostUri = firstPostResponse.uri;
+      let previousPostCid = firstPostResponse.cid;
+      
+      // Store all created post URIs
+      const postUris = [previousPostUri];
+
+      // Create the rest of the posts in the thread as replies to the previous one
+      for (let i = 1; i < posts.length; i++) {
+        // Create the reply record
+        const replyRecord: any = {
+          text: posts[i],
+          createdAt: new Date().toISOString(),
+          reply: {
+            parent: { uri: previousPostUri, cid: previousPostCid },
+            root: { uri: firstPostResponse.uri, cid: firstPostResponse.cid }
+          }
+        };
+
+        const replyResponse = await agent.post(replyRecord);
+        
+        if (!replyResponse || !replyResponse.uri) {
+          throw new Error(`Failed to create post #${i+1} in the thread`);
+        }
+
+        // Update the previous post references for the next iteration
+        previousPostUri = replyResponse.uri;
+        previousPostCid = replyResponse.cid;
+        
+        postUris.push(replyResponse.uri);
+      }
+
+      // Format the response with all post URIs
+      const responseText = `Thread created successfully!\n\n${postUris.map((uri, index) => 
+        `Post #${index + 1}: ${uri} (${uri.replace('at://', 'https://bsky.app/profile/').replace('/app.bsky.feed.post/', '/post/')})`
+      ).join('\n')}`;
+      
+      return mcpSuccessResponse(responseText);
+    } catch (error) {
+      return mcpErrorResponse(`Error creating thread: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+);
+
+server.tool(
   "get-post-likes",
   "Get information about users who have liked a specific post",
   {
